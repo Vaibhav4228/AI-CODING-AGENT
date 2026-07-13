@@ -1,0 +1,6 @@
+node_modules
+dist
+.env
+public/chat-history/
+public/working-dir/
+public/memory/
