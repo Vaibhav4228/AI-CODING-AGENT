@@ -1,4 +1,4 @@
-import express, { Express, NextFunction, Response, Request } from 'express'
+import express, { Express, NextFunction, Response, Request, Router } from 'express'
 import cors from 'cors'
 import path from 'node:path'
 import passport from "passport"
@@ -7,8 +7,11 @@ import { Strategy as GitHubStrategy } from "passport-github2"
 import MongoStore from 'connect-mongo'
 import { handleExpressError } from '../exceptions/handleExpressError'
 import { UserService } from '../../services/UserService'
+import { uploadProject } from '../../http/controllers/uploadFileController'
 
 export function expressServer(app: Express, PORT: number) {
+    const router = Router()
+
     app.use(cors({
         origin: '*',
         credentials: true,
@@ -17,6 +20,7 @@ export function expressServer(app: Express, PORT: number) {
     app.use(express.json())
     app.use(express.urlencoded({ extended: true }))
     app.use('/assets', express.static(path.join(process.cwd(), 'public/assets')));
+    app.use(uploadProject(router))
 
     app.get('/', async (req: Request, res: Response) => {
         res.json({ message: "server is up" })
