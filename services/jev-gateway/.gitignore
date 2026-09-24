@@ -1,0 +1,7 @@
+# my-codex JEV Gateway
+__pycache__/
+.venv/
+venv/
+.env
+*.pyc
+.pytest_cache/

@@ -1,0 +1,10 @@
+STEPS.md
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/public/chat-history/
+backend/public/working-dir/
+backend/public/memory/
+backend/learning/
+services/jev-gateway/.venv/
+services/jev-gateway/.env
