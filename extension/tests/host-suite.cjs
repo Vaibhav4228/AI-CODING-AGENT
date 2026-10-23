@@ -6,6 +6,10 @@ exports.run = async () => {
   const api = await extension.activate();
   assert.equal(api.getMode(), "mock-only");
   await vscode.commands.executeCommand("localAgent.open");
+  const deadline = Date.now() + 10000;
+  while (!api.getPreviewSummary().bridgeReady && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(api.getPreviewSummary().viewResolved, true);
+  assert.equal(api.getPreviewSummary().bridgeReady, true, "The real VS Code webview must load its bundled UI and send its validated ready handshake");
   assert.equal(extension.isActive, true);
   assert.equal(api.getPreviewSummary().providerConnected, false);
   await vscode.commands.executeCommand("workbench.action.closeSidebar");

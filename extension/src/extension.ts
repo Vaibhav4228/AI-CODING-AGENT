@@ -2,9 +2,11 @@ import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import { DemoController } from "./demo";
 import { renderHtml } from "./html";
+import { uiIntentSchema } from "@local-agent/protocol";
 
 export function activate(context: vscode.ExtensionContext) {
   let currentView: vscode.WebviewView | undefined;
+  let bridgeReady = false;
   const controller = new DemoController(
     (message) => { void currentView?.webview.postMessage(message); },
     vscode.workspace.workspaceFolders?.[0]?.name ?? "No folder selected",
@@ -14,6 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("localAgent.sidebar", {
     resolveWebviewView(view) {
       currentView = view;
+      bridgeReady = false;
       const media = vscode.Uri.joinPath(context.extensionUri, "media");
       view.webview.options = { enableScripts: true, localResourceRoots: [media] };
       view.webview.html = renderHtml({
@@ -21,12 +24,16 @@ export function activate(context: vscode.ExtensionContext) {
         scriptUri: view.webview.asWebviewUri(vscode.Uri.joinPath(media, "index.js")).toString(),
         styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(media, "index.css")).toString(),
       });
-      const listener = view.webview.onDidReceiveMessage((message: unknown) => controller.receive(message));
+      const listener = view.webview.onDidReceiveMessage((message: unknown) => {
+        const parsed = uiIntentSchema.safeParse(message);
+        if (parsed.success && parsed.data.type === "ui.ready") bridgeReady = true;
+        controller.receive(message);
+      });
       view.onDidDispose(() => { listener.dispose(); if (currentView === view) currentView = undefined; });
     },
   }));
   context.subscriptions.push(vscode.commands.registerCommand("localAgent.open", () => vscode.commands.executeCommand("workbench.view.extension.localAgent")));
   context.subscriptions.push(vscode.commands.registerCommand("localAgent.resetPreview", () => controller.reset()));
   // Read-only diagnostics for extension-host integration tests; no prompts or secrets.
-  return { getMode: () => "mock-only", getPreviewSummary: () => ({ phase: controller.snapshot().phase, providerConnected: false, messageCount: controller.snapshot().messages.length }) };
+  return { getMode: () => "mock-only", getPreviewSummary: () => ({ phase: controller.snapshot().phase, providerConnected: false, messageCount: controller.snapshot().messages.length, viewResolved: !!currentView, bridgeReady }) };
 }

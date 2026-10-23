@@ -1,6 +1,6 @@
 # AI Coding Agent
 
-Local-workspace-first coding agent under development. The existing code includes a tested local IPC/checkpoint foundation. The VS Code frontend, real agent loop, workspace tools and execution sandbox are still pending.
+Local-workspace-first coding agent under development. The existing code includes a tested local IPC/checkpoint foundation. A mocked VS Code/React sidebar is now installable. The real agent loop, workspace tools and execution sandbox remain pending.
 
 ## Development baseline
 
@@ -28,6 +28,24 @@ The committed `backend/.npmrc` currently uses `legacy-peer-deps=true`; peer comp
 | `npm run inventory` | Print lockfile-based dependency/license metadata; no provider calls |
 
 Tests do not start Express/MongoDB, execute shell tools, or contact LLM, embedding, JEV or Browserbase providers. Build output goes to ignored `backend/dist/`.
+
+## VS Code preview (Step 2)
+
+Install `extension/artifacts/workspace-agent-preview-0.0.1.vsix` via **Extensions > Install from VSIX**, then run **Workspace Agent: Open Preview**. This is a scripted UI demonstration; it does not read/edit repository files or call any provider.
+
+From the repository root, after installing protocol and backend dependencies:
+
+```powershell
+npm ci --prefix extension --ignore-scripts --no-audit --no-fund
+npm --prefix extension run check
+npm --prefix extension run test:ui
+npm --prefix extension run test:host
+npm --prefix extension run package
+```
+
+See [extension setup](extension/README.md) and the local [Step 2 report](docs/STEP_2_REPORT.md). The UI/browser tests use disposable profiles; your normal VS Code/browser profile is not modified.
+
+The selected provider direction is **DeepSeek R1**, not OpenAI. The root `.env.example` contains placeholders; put credentials only in the ignored local `.env`. Never paste keys into the demo composer. The preview does not load that file. Exact endpoint/model ID and tool support will be verified in Step 6; no silent model substitution is planned.
 
 ## Existing server: legacy development only
 
