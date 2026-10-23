@@ -1,0 +1,39 @@
+{
+  "name": "local-agent-preview",
+  "displayName": "Workspace Agent (Preview)",
+  "publisher": "local-labs",
+  "version": "0.0.1",
+  "description": "Local-workspace-first coding agent UI preview. Mock interactions only.",
+  "private": true,
+  "engines": { "vscode": "^1.100.0", "node": ">=24.20.0 <25" },
+  "categories": ["Other"],
+  "extensionKind": ["workspace"],
+  "main": "./dist/extension.cjs",
+  "activationEvents": ["onView:localAgent.sidebar", "onCommand:localAgent.open"],
+  "capabilities": { "virtualWorkspaces": false, "untrustedWorkspaces": { "supported": "limited", "description": "Only the mock UI is available; no workspace contents are read, uploaded or executed." } },
+  "contributes": {
+    "commands": [
+      { "command": "localAgent.open", "title": "Workspace Agent: Open Preview" },
+      { "command": "localAgent.resetPreview", "title": "Workspace Agent: Reset Demo" }
+    ],
+    "viewsContainers": { "activitybar": [{ "id": "localAgent", "title": "Workspace Agent", "icon": "media/agent.svg" }] },
+    "views": { "localAgent": [{ "type": "webview", "id": "localAgent.sidebar", "name": "Workspace Agent" }] }
+  },
+  "scripts": {
+    "build:protocol": "npm --prefix ../packages/protocol run build",
+    "typecheck": "npm run build:protocol && tsc --noEmit",
+    "build": "npm run build:protocol && node scripts/build.mjs",
+    "lint": "node ../backend/node_modules/eslint/bin/eslint.js --config eslint.config.mjs src webview-ui/src tests scripts --max-warnings 0",
+    "test": "npm run build && node --test tests/*.test.cjs",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "test:ui": "npm run build && node tests/ui.cjs",
+    "test:host": "npm run build && node tests/host.cjs",
+    "vscode:prepublish": "npm run typecheck && npm run build",
+    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license --out artifacts/workspace-agent-preview-0.0.1.vsix"
+  },
+  "dependencies": { "@local-agent/protocol": "file:../packages/protocol", "react": "19.2.4", "react-dom": "19.2.4" },
+  "devDependencies": {
+    "@types/node": "24.19.2", "@types/react": "19.2.14", "@types/react-dom": "19.2.3", "@types/vscode": "1.100.0",
+    "typescript": "5.9.3", "esbuild": "^0.25.0", "@vscode/vsce": "^3.6.0", "@vscode/test-electron": "^2.5.2", "playwright": "1.61.1"
+  }
+}

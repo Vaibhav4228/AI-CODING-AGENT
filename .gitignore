@@ -8,3 +8,25 @@ backend/public/memory/
 backend/learning/
 services/jev-gateway/.venv/
 services/jev-gateway/.env
+
+# Shared packages and local runtime output
+**/node_modules/
+**/dist/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local documentation and implementation plans
+/docs/
+/AI_AGENT_END_TO_END_PLAN.md
+/IMPLEMENTATION_STEPS.md
+
+# Secrets and extension development artifacts
+**/.env
+**/.env.*
+!**/.env.example
+/extension/.test-work/
+/extension/.vscode-test/
+/extension/artifacts/
+/extension/media/index.js
+/extension/media/index.css

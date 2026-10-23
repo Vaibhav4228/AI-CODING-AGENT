@@ -1,0 +1,8 @@
+**/*
+!package.json
+!README.md
+!CHANGELOG.md
+!dist/extension.cjs
+!media/agent.svg
+!media/index.js
+!media/index.css

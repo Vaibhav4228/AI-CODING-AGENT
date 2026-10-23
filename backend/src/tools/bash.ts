@@ -319,7 +319,7 @@ export const bashTool = tool(
     await ensureProjectDir(getProjectRoot(userId, projectId));
     await ensureProjectDir(cwd);
 
-    let normalizedCommand = normalizeCommand(command);
+    const normalizedCommand = normalizeCommand(command);
     const validationError = validateCommand(normalizedCommand);
     if (validationError) return validationError;
 

@@ -1,0 +1,17 @@
+const assert = require("node:assert/strict");
+const vscode = require("vscode");
+exports.run = async () => {
+  const extension = vscode.extensions.getExtension("local-labs.local-agent-preview");
+  assert.ok(extension);
+  const api = await extension.activate();
+  assert.equal(api.getMode(), "mock-only");
+  await vscode.commands.executeCommand("localAgent.open");
+  assert.equal(extension.isActive, true);
+  assert.equal(api.getPreviewSummary().providerConnected, false);
+  await vscode.commands.executeCommand("workbench.action.closeSidebar");
+  await vscode.commands.executeCommand("localAgent.open");
+  await vscode.commands.executeCommand("localAgent.resetPreview");
+  assert.equal(api.getPreviewSummary().phase, "idle");
+  assert.equal(api.getPreviewSummary().messageCount, 0);
+  console.log("Extension host PASS: activation, sidebar command, close/reopen, reset, mock-only state.");
+};
