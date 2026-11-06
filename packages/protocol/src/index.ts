@@ -38,6 +38,14 @@ export const approvalSchema = z.object({
   expiresAt: z.iso.datetime(), decision: z.enum(["approve_once", "deny"]),
 }).strict();
 
+// Only the trusted host supplies the current workspace revision and tool arguments.
+export const actionSchema = z.discriminatedUnion("capability", [
+  z.object({ capability: z.literal("workspace.edit"), patch: patchSchema }).strict(),
+  z.object({ capability: z.literal("sandbox.execute"), executable: z.string().min(1).max(512),
+    argv: z.array(z.string().max(4096)).max(128), cwd: z.string().min(1).max(1024) }).strict(),
+]);
+const reviewRequest = z.object({ runId: idSchema, workspaceRevision: digestSchema, action: actionSchema }).strict();
+
 export const callSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("runtime.health"), params: z.object({}).strict() }).strict(),
   z.object({ method: z.literal("runtime.shutdown"), params: z.object({}).strict() }).strict(),
@@ -48,6 +56,8 @@ export const callSchema = z.discriminatedUnion("method", [
   }).strict() }).strict(),
   z.object({ method: z.literal("context.request"), params: contextRequestSchema }).strict(),
   z.object({ method: z.literal("patch.propose"), params: patchSchema }).strict(),
+  z.object({ method: z.literal("approval.request"), params: reviewRequest }).strict(),
+  z.object({ method: z.literal("approval.consume"), params: reviewRequest.extend({ approvalId: idSchema }) }).strict(),
   z.object({ method: z.literal("approval.decide"), params: approvalSchema }).strict(),
 ]);
 
@@ -57,12 +67,14 @@ export const requestSchema = z.object({
 }).strict();
 
 export const resultSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("review"), approval: approvalSchema.omit({ decision: true }) }).strict(),
+  z.object({ kind: z.literal("approvalState"), status: z.enum(["approved","denied","consumed"]) }).strict(),
   z.object({ kind: z.literal("health"), mode: z.literal("boundary-only"), storage: z.literal("sqlite") }).strict(),
   z.object({ kind: z.literal("checkpoint"), checkpoint: checkpointSchema.nullable() }).strict(),
   z.object({ kind: z.literal("shutdown") }).strict(),
 ]);
 
-export const errorCodeSchema = z.enum(["INVALID_REQUEST", "UNAUTHORIZED", "WORKSPACE_DENIED", "CONFLICT", "NOT_IMPLEMENTED", "REPLAY", "INTERNAL"]);
+export const errorCodeSchema = z.enum(["INVALID_REQUEST", "UNAUTHORIZED", "WORKSPACE_DENIED", "CONFLICT", "NOT_IMPLEMENTED", "APPROVAL_DENIED", "REPLAY", "INTERNAL"]);
 export const responseSchema = z.discriminatedUnion("ok", [
   z.object({ protocolVersion: z.literal(1), requestId: idSchema.nullable(), ok: z.literal(true), result: resultSchema }).strict(),
   z.object({ protocolVersion: z.literal(1), requestId: idSchema.nullable(), ok: z.literal(false), error: z.object({ code: errorCodeSchema }).strict() }).strict(),

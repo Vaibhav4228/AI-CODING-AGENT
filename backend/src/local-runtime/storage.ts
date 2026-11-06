@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { chmodSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { checkpointSchema, checkpointStateSchema, Checkpoint, CheckpointState, idSchema } from "@local-agent/protocol";
 
+export class ApprovalDenied extends Error {}
+export interface ApprovalScope { owner: string; session: string; workspace: string; run: string }
 export class RevisionConflict extends Error {}
 
 /** Caller-owned private extension storage only; never a model-selected path. */
@@ -37,6 +40,11 @@ export class LocalCheckpointStore {
           owner TEXT NOT NULL, workspace TEXT NOT NULL, run TEXT NOT NULL,
           revision INTEGER NOT NULL, state TEXT NOT NULL,
           PRIMARY KEY (owner, workspace, run)
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS approvals (
+          id TEXT PRIMARY KEY, owner TEXT NOT NULL, session TEXT NOT NULL, workspace TEXT NOT NULL,
+          run TEXT NOT NULL, hash TEXT NOT NULL, policy INTEGER NOT NULL, expires INTEGER NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('pending','approved','denied','consumed'))
         ) STRICT; PRAGMA user_version=1;`);
     } catch (error) {
       this.db.close();
@@ -69,6 +77,26 @@ export class LocalCheckpointStore {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  requestApproval(scope: ApprovalScope, hash: string) {
+    const id = randomUUID();
+    const expires = Date.now() + 5 * 60_000;
+    this.db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'pending')")
+      .run(id, scope.owner, scope.session, scope.workspace, scope.run, hash, expires);
+    return { approvalId: id, workspaceId: scope.workspace, runId: scope.run, argumentHash: hash,
+      policyVersion: 1 as const, expiresAt: new Date(expires).toISOString() };
+  }
+
+  transitionApproval(scope: ApprovalScope, id: string, hash: string, status: "approved" | "denied" | "consumed", reviewedExpiry?: number) {
+    const prior = status === "consumed" ? "approved" : "pending";
+    // One conditional write also serializes concurrent consumers across connections.
+    const update = this.db.prepare(`UPDATE approvals SET status=?
+      WHERE id=? AND owner=? AND session=? AND workspace=? AND run=? AND hash=? AND policy=1
+      AND status=? AND expires>? AND (? IS NULL OR expires=?)`)
+      .run(status, id, scope.owner, scope.session, scope.workspace, scope.run, hash, prior, Date.now(),
+        reviewedExpiry ?? null, reviewedExpiry ?? null);
+    if (update.changes !== 1) throw new ApprovalDenied();
   }
 
   close(): void {

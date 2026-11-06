@@ -1,8 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { ErrorCode, idSchema, MAX_MESSAGE_BYTES, requestSchema, Response, responseSchema } from "@local-agent/protocol";
-import { LocalCheckpointStore, RevisionConflict } from "./storage";
+import { ApprovalDenied, LocalCheckpointStore, RevisionConflict } from "./storage";
 
 export interface WorkspaceGrant { workspaceId: string; root: string; trusted: boolean }
 export interface BoundaryOptions { ownerId: string; sessionId: string; token: string; storageDirectory: string; workspaces: WorkspaceGrant[] }
@@ -72,8 +72,26 @@ export class RuntimeBoundary {
           : this.store.save(this.options.ownerId, grant.workspaceId, call.params.runId, call.params.expectedRevision, call.params.state);
         return responseSchema.parse({ protocolVersion: 1, requestId, ok: true, result: { kind: "checkpoint", checkpoint } });
       }
+      if (call.method === "approval.request" || call.method === "approval.consume" || call.method === "approval.decide") {
+        const scope = { owner: this.options.ownerId, session: this.options.sessionId, workspace: grant.workspaceId, run: call.params.runId };
+        if (call.method === "approval.decide") {
+          const review = call.params;
+          if (review.workspaceId !== grant.workspaceId) return fail("APPROVAL_DENIED");
+          const status = review.decision === "deny" ? "denied" : "approved";
+          this.store.transitionApproval(scope, review.approvalId, review.argumentHash, status, Date.parse(review.expiresAt));
+          return { protocolVersion: 1, requestId, ok: true, result: { kind: "approvalState", status } };
+        }
+        // Parsed strict schemas provide stable object field order; preserve argv order and exact patch text.
+        const hash = createHash("sha256").update(JSON.stringify([grant.root, call.params.workspaceRevision, call.params.action])).digest("hex");
+        if (call.method === "approval.request") {
+          return { protocolVersion: 1, requestId, ok: true, result: { kind: "review", approval: this.store.requestApproval(scope, hash) } };
+        }
+        this.store.transitionApproval(scope, call.params.approvalId, hash, "consumed");
+        return { protocolVersion: 1, requestId, ok: true, result: { kind: "approvalState", status: "consumed" } };
+      }
       return fail("NOT_IMPLEMENTED");
     } catch (error) {
+      if (error instanceof ApprovalDenied) return fail("APPROVAL_DENIED");
       return fail(error instanceof RevisionConflict ? "CONFLICT" : "INTERNAL");
     }
   }

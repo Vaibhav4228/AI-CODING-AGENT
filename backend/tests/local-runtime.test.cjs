@@ -85,7 +85,7 @@ test("context, patch and approval contracts cannot enable tools in Step 1", (t) 
       { method: "patch.propose", params: { patchId: randomUUID(), documentUri: "file:///fixture.ts", expectedDocumentVersion: 1, expectedContentHash: "a".repeat(64), unifiedDiff: "fixture diff" } },
       { method: "approval.decide", params: { approvalId: randomUUID(), runId: randomUUID(), workspaceId: randomUUID(), argumentHash: "b".repeat(64), policyVersion: 1, expiresAt: "2099-01-01T00:00:00.000Z", decision: "approve_once" } },
     ];
-    for (const call of calls) assert.equal(boundary.handle(request(call)).error.code, "NOT_IMPLEMENTED");
+    for (const call of calls) assert.equal(boundary.handle(request(call)).error.code, call.method === "approval.decide" ? "APPROVAL_DENIED" : "NOT_IMPLEMENTED");
   } finally { boundary.close(); }
 });
 
@@ -180,4 +180,27 @@ test("real child IPC starts, saves, rejects scope and survives runtime restart",
     assert.equal(loaded.result.checkpoint.state.summary, state.summary);
     assert.equal(loaded.result.checkpoint.revision, 1);
   } finally { await restarted.stop(); }
+});
+
+test("exact approvals survive restart, resist tampering and can be consumed only once", (t) => {
+  const { options, boundary, request } = boundaryFixture(t);
+  const args = { runId: randomUUID(), workspaceRevision: "a".repeat(64),
+    action: { capability: "sandbox.execute", executable: "npm", argv: ["test"], cwd: "." } };
+  const review = boundary.handle(request({ method: "approval.request", params: args })).result.approval;
+  const decide = decision => request({ method: "approval.decide", params: { ...review, decision } });
+  const consume = changes => request({ method: "approval.consume", params: { ...args, approvalId: review.approvalId, ...changes } });
+  assert.equal(boundary.handle(consume({})).ok, false);
+  assert.equal(boundary.handle(decide("approve_once")).ok, true);
+  boundary.close();
+  const resumed = new RuntimeBoundary(options);
+  try {
+    for (const change of [{ runId: randomUUID() }, { workspaceRevision: "b".repeat(64) },
+        { action: { ...args.action, argv: ["publish"] } }])
+      assert.equal(resumed.handle(consume(change)).error.code, "APPROVAL_DENIED");
+    assert.equal(resumed.handle(consume({})).result.status, "consumed");
+    assert.equal(resumed.handle(consume({})).error.code, "APPROVAL_DENIED");
+    const second = resumed.handle(request({ method: "approval.request", params: args })).result.approval;
+    assert.equal(resumed.handle(request({ method: "approval.decide", params: { ...second, decision: "deny" } })).result.status, "denied");
+    assert.equal(resumed.handle(consume({ approvalId: second.approvalId })).error.code, "APPROVAL_DENIED");
+  } finally { resumed.close(); }
 });
