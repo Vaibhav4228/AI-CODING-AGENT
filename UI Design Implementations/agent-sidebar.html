@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vaibhav Forge · Sidebar prototype</title>
+<style>
+:root{color-scheme:dark;--bg:#191b1e;--surface:#23262a;--line:#383c40;--ink:#eff0ed;--muted:#b2b7b6;--accent:#b7e0ac;font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#101214;color:var(--ink)}button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:none;border:0}button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:hover{background:#ffffff0b}button:disabled{opacity:.4;cursor:default}
+.app{width:min(100%,480px);height:100dvh;margin:auto;background:var(--bg);border-inline:1px solid var(--line);display:flex;flex-direction:column}
+header{height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--line)}.mark{display:grid;place-items:center;width:29px;height:29px;border-radius:8px;background:var(--accent);color:#203421;font:700 14px monospace}.brand{font-weight:650;letter-spacing:-.3px}.project{margin-left:auto;max-width:47%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:11px monospace}
+nav{display:flex;gap:18px;padding:0 18px;border-bottom:1px solid var(--line)}nav button{padding:11px 0;color:var(--muted);border-bottom:2px solid transparent}nav [aria-pressed=true]{color:var(--ink);border-color:var(--accent)}
+main{flex:1;min-height:0;overflow:auto;padding:22px 18px}h1{font-size:24px;font-weight:600;letter-spacing:-.8px;line-height:1.2;margin:0 0 10px}p{margin:0;color:var(--muted)}.starter{padding:clamp(18px,7vh,58px) 0 12px}.star{display:block;color:var(--accent);font-size:29px;margin-bottom:16px}.choices{margin:24px 0;display:grid;gap:8px}.choice,.file{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px}.choice strong,.file strong{font-weight:550;font-size:13px}.choice small,.file small{display:block;color:var(--muted);font-size:12px}.glyph{color:var(--accent);font:15px monospace;width:22px;text-align:center}.arrow{margin-left:auto;color:var(--muted)}
+footer{flex:none;padding:12px 14px;border-top:1px solid var(--line)}.composer{border:1px solid #555d5a;background:var(--surface);border-radius:12px;padding:9px}.composer:focus-within{border-color:var(--accent)}textarea{background:none;border:0;resize:none;width:100%;height:54px;padding:5px}.tools,.status,.section-head,.who{display:flex;align-items:center;gap:8px}.tools button,.file button{border-radius:6px;min-width:32px;min-height:32px}.plus{font-size:20px}.send{margin-left:auto;background:var(--accent);color:#1b301c;font-size:19px}.send:hover{background:#cdeac7}.status{justify-content:space-between;color:var(--muted);font-size:11px;margin:8px 2px 0}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px}.chips{display:flex;gap:4px;flex-wrap:wrap}.chip{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--line);border-radius:5px;font-size:11px;padding-left:6px}.chip span,.file div{min-width:0;overflow-wrap:anywhere}.chip button{padding:4px 7px}.section-head{justify-content:space-between;margin-bottom:14px}.section-head button{color:var(--accent)}.file{margin:8px 0}.file button{margin-left:auto}.msg{margin-bottom:20px;overflow-wrap:anywhere}.who{color:var(--muted);font-size:12px;margin-bottom:6px}.msg.user .body{background:var(--surface);border-radius:8px;padding:10px 12px}.body{white-space:pre-wrap}.note{color:var(--muted);font-size:12px;margin-top:8px}.empty{padding:18px 0}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}[hidden]{display:none!important}
+nav{gap:clamp(8px,3vw,18px)}.card{margin:16px 0;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:9px}.card h2{font-size:15px;margin:0 0 10px}.card label{display:block;margin:10px 0 4px}.card select,.card input[type=password]{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:8px;font:inherit}.card input[type=range],progress{width:100%;accent-color:var(--accent)}.card button,.estimate{padding:6px 8px;border-radius:5px;color:var(--accent)}.ledger{padding:0;list-style:none}.ledger li{border-bottom:1px solid var(--line);padding:8px 0}.mono{font:13px/1.6 monospace}.estimate{font-size:11px;text-align:left}.card small{color:var(--muted)}.pair{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}</style></head><body><div class="app">
+<header><span class="mark" aria-hidden="true">VF</span><span class="brand">Vaibhav Forge</span><span class="project" title="AI-CODING-AGENT">AI-CODING-AGENT</span></header>
+<nav aria-label="Agent views"><button id="chatTab" aria-pressed="true">Chat</button><button id="contextTab" aria-pressed="false">Context</button><button id="usageTab" aria-pressed="false">Usage</button><button id="settingsTab" aria-pressed="false">Settings</button></nav>
+<main id="scroll"><section id="chat"><div class="starter" id="start"><span class="star" aria-hidden="true">✳</span><h1>What are we working on?</h1><p>Start with a question or attach a file.</p><div class="choices">
+<button class="choice" data-prompt="Explain how this code works."><span class="glyph">{ }</span><span><strong>Explain code</strong><small>Trace a function or a file</small></span><span class="arrow">↗</span></button>
+<button class="choice" data-prompt="Help me investigate this error: "><span class="glyph">⌕</span><span><strong>Investigate an error</strong><small>Start from a failing test or stack trace</small></span><span class="arrow">↗</span></button>
+</div></div><div id="messages" role="log" aria-label="Conversation"></div></section>
+<section id="context" hidden><div class="section-head"><h1>Draft context</h1><button id="attachMore">+ Add files</button></div><p>Files selected for your next message.</p><div id="files"></div></section><section id="settings" hidden><h1>Settings</h1><div class="card"><h2>Model connection</h2><label for="provider">Provider</label><select id="provider"><option>DeepSeek</option><option>OpenRouter free model</option></select><label for="key">Provider API key</label><input id="key" type="password" placeholder="Enter a dummy key to try setup" autocomplete="off"><small>Prototype only. Use a dummy key. The extension design uses VS Code SecretStorage.</small><div><button id="saveKey">Set demo key</button><button id="removeKey">Remove</button></div><p role="status" id="keyStatus"></p></div>
+<div class="card"><h2>Run controls</h2><label><input type="checkbox" id="jev" checked> Preview JEV routing advice</label><small>A local simulation recommends a reply allowance. The run budget always applies.</small><label for="cap">Token budget per run · <output id="limit"></output></label><input id="cap" type="range" min="512" max="8192" step="256" value="4096"></div></section>
+<section id="usage" hidden><h1>Usage</h1><div class="card"><h2>Before you send</h2><p id="breakdown" class="mono"></p><progress id="meter"></progress><p id="route"></p><p class="note" id="cost"></p><small>Rough input estimate: one token per four UTF-8 bytes, including selected file sizes. Reply allowance is a ceiling. Actual tokenization and provider overhead vary.</small></div>
+<div class="card"><h2>Session ledger</h2><p>Actual provider usage: 0 tokens · $0 billed</p><p class="note">Production design: customer-key calls count toward customer spend. Platform-funded calls and any paid JEV requests need separate usage records.</p><ul id="ledger" class="ledger"></ul></div></section></main>
+<footer id="footer"><form id="form" class="composer"><div class="chips" id="chips"></div><label class="sr" for="prompt">Message</label><textarea id="prompt" placeholder="Ask about your code…" maxlength="8000"></textarea><div class="tools"><button type="button" class="plus" id="attach" aria-label="Attach files" title="Attach files">+</button><button class="send" id="send" disabled aria-label="Send message" title="Send message">↑</button></div></form><div class="status"><span><i class="dot"></i>Local prototype</span><button id="estimate" class="estimate" title="Inspect token estimate"></button></div></footer>
+<input id="picker" type="file" multiple hidden><span id="announce" class="sr" role="status"></span></div>
+<script>
+const el=id=>document.getElementById(id);
+let draftFiles=[];
+function element(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
+const keys = new Set();
+const runs = [];
+function view(name){
+ for(const tab of ['chat','context','usage','settings']){
+  el(tab).hidden=tab!==name;
+  el(tab+'Tab').setAttribute('aria-pressed',String(tab===name));
+ }
+ el('footer').hidden=name!=='chat';
+ el('scroll').scrollTop=0;
+}
+function forecast(){
+ const promptBytes=new TextEncoder().encode(el('prompt').value).length;
+ const input=Math.ceil((promptBytes+draftFiles.reduce((n,f)=>n+f.size,0))/4);
+ const complex=/debug|investigate|refactor|error|implement|fix/i.test(el('prompt').value);
+ const advised=el('jev').checked&&!complex?256:1024;
+ const cap=Number(el('cap').value);
+ const reply=Math.max(0,Math.min(advised,cap-input));
+ return {input,reply,cap,complex,total:input+reply};
+}
+function usage(){
+ const v=forecast(), provider=el('provider').value;
+ el('limit').value=v.cap.toLocaleString();
+ el('estimate').textContent=v.reply?'~'+v.total.toLocaleString()+' tokens / run':'Over budget · review';
+ el('breakdown').textContent='Input ~'+v.input+' + reply allowance '+v.reply+' / budget '+v.cap;
+ el('meter').max=v.cap;el('meter').value=Math.min(v.total,v.cap);
+ el('route').textContent=!v.reply?'Reduce attachments or increase the run budget.':el('jev').checked?(v.complex?'JEV preview: investigation task.':'JEV preview: short answer.')+' Reply capped at '+v.reply+' tokens.':'Fixed reply allowance: '+v.reply+' tokens.';
+ const dollars=provider==='DeepSeek'?(v.input*0.5+v.reply*1.5)/1000000:0;
+ el('cost').textContent=provider==='DeepSeek'?'Scenario forecast: $'+dollars.toFixed(6)+' using illustrative rates of $0.50/$1.50 per million input/output tokens.':'Free-model scenario: $0 model cost, subject to provider quota.';
+ el('send').disabled=!el('prompt').value.trim()||!v.reply;
+ el('keyStatus').textContent=keys.has(provider)?'Demo key configured for '+provider+'.':'No demo key configured for '+provider+'.';
+ el('removeKey').disabled=!keys.has(provider);
+ el('ledger').replaceChildren();
+ if(!runs.length)el('ledger').append(element('li','note','Send a demo message to see its estimate here.'));
+ for(const r of runs.slice().reverse())el('ledger').append(element('li','mono',r));
+}
+function paint(){
+ el('chips').replaceChildren();el('files').replaceChildren();el('contextTab').textContent=draftFiles.length?'Context ('+draftFiles.length+')':'Context';
+ if(!draftFiles.length)el('files').append(element('p','empty','No files selected.'));
+ for(const f of draftFiles){for(const list of ['chips','files']){
+ const row=element('div',list==='chips'?'chip':'file');const label=element(list==='chips'?'span':'div','',f.name);
+ if(list==='files')label.append(element('small','',f.size.toLocaleString()+' bytes'));
+ const remove=element('button','','×');remove.type='button';remove.setAttribute('aria-label','Remove '+f.name);remove.onclick=()=>{draftFiles=draftFiles.filter(x=>x!==f);paint();(list==='chips'?el('attach'):el('attachMore')).focus()};
+ row.append(label,remove);el(list).append(row)}}usage()
+}
+for(const name of ['chat','context','usage','settings'])el(name+'Tab').onclick=()=>view(name);
+el('estimate').onclick=()=>view('usage');
+el('cap').oninput=el('jev').onchange=usage;
+el('provider').onchange=()=>{el('key').value='';usage()};
+el('saveKey').onclick=()=>{if(!el('key').value.trim()){el('keyStatus').textContent='Enter a dummy key first.';el('key').focus();return}keys.add(el('provider').value);el('key').value='';usage()};
+el('removeKey').onclick=()=>{keys.delete(el('provider').value);el('key').value='';usage()};
+el('attach').onclick=el('attachMore').onclick=()=>el('picker').click();
+el('picker').onchange=e=>{for(const f of e.target.files)if(!draftFiles.some(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified))draftFiles.push(f);e.target.value='';paint();el('announce').textContent=draftFiles.length+' files selected'};
+document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{el('prompt').value=b.dataset.prompt;paint();el('prompt').focus()});
+el('prompt').oninput=paint;el('prompt').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();el('form').requestSubmit()}};
+function message(role,text,files=[]){const n=element('article','msg '+role);n.append(element('div','who',role==='user'?'You':'Vaibhav Forge'),element('div','body',text));for(const f of files)n.append(element('div','note','↳ '+f.name));el('messages').append(n)}
+el('form').onsubmit=e=>{e.preventDefault();const text=el('prompt').value.trim();const v=forecast();if(!text||!v.reply)return;runs.push(el('provider').value+' · ~'+v.input+' input + '+v.reply+' reply allowance · $0 billed');el('start').hidden=true;message('user',text,draftFiles);message('agent','Message preview only. This HTML prototype runs locally without a model connection.');draftFiles=[];el('prompt').value='';paint();el('scroll').scrollTop=el('scroll').scrollHeight;el('prompt').focus()};paint();
+</script></body></html>

@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import { DemoController } from "./demo";
 import { renderHtml } from "./html";
-import { uiIntentSchema } from "@local-agent/protocol";
+import { WorkspaceContextService } from "./workspace/service";
+import { contextIntentSchema, uiIntentSchema } from "@local-agent/protocol";
 
 export function activate(context: vscode.ExtensionContext) {
   let currentView: vscode.WebviewView | undefined;
@@ -12,6 +13,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.workspaceFolders?.[0]?.name ?? "No folder selected",
     vscode.workspace.isTrusted,
   );
+  const workspace = new WorkspaceContextService((state) => {
+    if (currentView && bridgeReady) void currentView.webview.postMessage({
+      protocolVersion: 1, type: "workspace.context", viewId: controller.snapshot().viewId, state,
+    });
+  });
+  context.subscriptions.push(workspace);
   context.subscriptions.push({ dispose: () => controller.dispose() });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("localAgent.sidebar", {
     resolveWebviewView(view) {
@@ -25,9 +32,21 @@ export function activate(context: vscode.ExtensionContext) {
         styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(media, "index.css")).toString(),
       });
       const listener = view.webview.onDidReceiveMessage((message: unknown) => {
+        if (view !== currentView) return;
+        const intent = contextIntentSchema.safeParse(message);
+        if (intent.success) {
+          if (bridgeReady && intent.data.viewId === controller.snapshot().viewId) void workspace.execute(intent.data.action);
+          return;
+        }
         const parsed = uiIntentSchema.safeParse(message);
         if (parsed.success && parsed.data.type === "ui.ready") bridgeReady = true;
-        controller.receive(message);
+        if (parsed.success && parsed.data.type === "demo.start") {
+          const previousRun = controller.snapshot().runId;
+          const files = workspace.snapshot().items.map((item) => item.relativePath);
+          controller.receive(message, files);
+          if (files.length && previousRun !== controller.snapshot().runId) void workspace.execute({ type: "context.clear" });
+        } else controller.receive(message);
+        if (parsed.success && parsed.data.type === "ui.ready") workspace.refreshMetadata();
       });
       view.onDidDispose(() => { listener.dispose(); if (currentView === view) currentView = undefined; });
     },

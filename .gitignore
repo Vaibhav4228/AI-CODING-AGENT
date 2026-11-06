@@ -30,3 +30,5 @@ services/jev-gateway/.env
 /extension/artifacts/
 /extension/media/index.js
 /extension/media/index.css
+
+/leanringd.md

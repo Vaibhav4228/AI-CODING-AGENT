@@ -23,7 +23,7 @@ export class DemoController {
     this.state.messages.push({ id: randomUUID(), role: "assistant", content });
     this.publish();
   }
-  receive(raw: unknown): void {
+  receive(raw: unknown, attachments: string[] = []): void {
     if (this.disposed) return;
     try { if (Buffer.byteLength(JSON.stringify(raw), "utf8") > 20000) return this.fail("Message rejected: invalid preview request."); } catch { return this.fail("Message rejected: invalid preview request."); }
     const parsed = uiIntentSchema.safeParse(raw);
@@ -52,7 +52,7 @@ export class DemoController {
     }
     if (["running", "awaiting_approval"].includes(this.state.phase)) return this.fail("Stop the current demo before starting another.");
     this.clearTimers();
-    this.state = { ...this.state, runId: randomUUID(), phase: "running", alert: null, approval: null, messages: [{ id: randomUUID(), role: "user", content: intent.prompt }], activities: [{ id: randomUUID(), title: "Build a small, verifiable plan", detail: "Simulated activity · no repository content is being read", status: "running" }] };
+    this.state = { ...this.state, runId: randomUUID(), phase: "running", alert: null, approval: null, messages: [{ id: randomUUID(), role: "user", content: intent.prompt, attachments }], activities: [{ id: randomUUID(), title: "Build a small, verifiable plan", detail: "Simulated activity · no repository content is being read", status: "running" }] };
     this.publish();
     const runId = this.state.runId;
     this.timers.push(this.clock.later(() => {
@@ -68,7 +68,7 @@ export class DemoController {
         this.state.approval = { id: randomUUID(), runId: runId!, title: "Review a proposed patch", description: "Demo only: propose a change to fixture.ts. Approving updates this preview; it grants no filesystem or terminal access." };
         return this.publish();
       }
-      this.finish("Here’s the workflow we’re building:\n\n1. Read only relevant files from your opened workspace.\n2. Propose a focused patch for review.\n3. Verify it in an isolated environment.\n4. Apply the reviewed result without overwriting your edits.\n\nThis is a scripted preview, not a DeepSeek response. Workspace tools arrive in Step 3.");
+      this.finish("Here’s the workflow we’re building:\n\n1. Read only relevant files from your opened workspace.\n2. Propose a focused patch for review.\n3. Verify it in an isolated environment.\n4. Apply the reviewed result without overwriting your edits.\n\nThis is a scripted preview, not a DeepSeek response. Open Workspace context to inspect your local files.");
     }, 700));
   }
   reset(): void {

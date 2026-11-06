@@ -1,6 +1,6 @@
 # AI Coding Agent
 
-Local-workspace-first coding agent under development. The existing code includes a tested local IPC/checkpoint foundation. A mocked VS Code/React sidebar is now installable. The real agent loop, workspace tools and execution sandbox remain pending.
+Local-workspace-first coding agent under development. The existing code includes a tested local IPC/checkpoint foundation. A mocked VS Code/React sidebar is now installable. The sidebar can inspect a trusted local workspace. The live agent loop and command sandbox are planned.
 
 ## Development baseline
 
@@ -31,7 +31,7 @@ Tests do not start Express/MongoDB, execute shell tools, or contact LLM, embeddi
 
 ## VS Code preview (Step 2)
 
-Install `extension/artifacts/workspace-agent-preview-0.0.1.vsix` via **Extensions > Install from VSIX**, then run **Workspace Agent: Open Preview**. This is a scripted UI demonstration; it does not read/edit repository files or call any provider.
+Install `extension/artifacts/workspace-agent-preview-0.0.1.vsix` via **Extensions > Install from VSIX**, then run **Workspace Agent: Open Preview**. Chat is scripted. Use Workspace context to inspect files, selections, diagnostics, saved Git diffs or bounded text searches locally. In a multi-root workspace choose a folder first. No provider receives this context.
 
 From the repository root, after installing protocol and backend dependencies:
 

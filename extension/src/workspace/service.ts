@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
+import { open } from "node:fs/promises";
 import { ContextAction, ContextItem, ContextState, contextStateSchema } from "@local-agent/protocol";
 import { ContextDenied, containsSensitiveText, excludedByDefault, MAX_FILE_BYTES, WorkspaceGuard } from "./policy";
 
@@ -21,7 +22,7 @@ export class WorkspaceContextService implements vscode.Disposable {
     this.subscriptions.push(
       vscode.window.onDidChangeActiveTextEditor((editor) => { if (editor) this.lastEditor = editor; this.refreshMetadata(); }),
       vscode.window.onDidChangeTextEditorSelection(() => this.refreshMetadata()),
-      vscode.workspace.onDidChangeTextDocument((event) => this.invalidate(event.document.uri)),
+      vscode.workspace.onDidChangeTextDocument((event) => event.contentChanges.length && this.invalidate(event.document.uri)),
       vscode.workspace.onDidCloseTextDocument((document) => this.invalidate(document.uri)),
       vscode.languages.onDidChangeDiagnostics((event) => { if (event.uris.some((uri) => this.state.items.some((item) => item.documentUri === uri.toString() && item.kind === "diagnostics"))) this.invalidate(); else this.refreshMetadata(); }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => { this.selected = undefined; this.selectInitial(); this.invalidate(); }),
@@ -74,6 +75,7 @@ export class WorkspaceContextService implements vscode.Disposable {
     this.publish();
   }
   invalidate(uri?: vscode.Uri): void {
+    if (uri && (uri.scheme !== "file" || !this.selected || vscode.workspace.getWorkspaceFolder(uri)?.uri.toString() !== this.selected.uri.toString())) return;
     this.generation++;
     const hadItems = this.state.items.length > 0;
     // Rule changes, external filesystem changes and workspace changes invalidate all.
@@ -85,7 +87,14 @@ export class WorkspaceContextService implements vscode.Disposable {
     this.refreshMetadata();
   }
   private async document(uri: vscode.Uri, guard: WorkspaceGuard): Promise<vscode.TextDocument> {
-    this.checked(uri, guard);
+    const target = this.checked(uri, guard);
+    // VS Code can decode binary bytes as text before getText() sees them.
+    const file = await open(target.filename, "r");
+    try {
+      const bytes = Buffer.alloc(target.size + 1);
+      const { bytesRead } = await file.read(bytes);
+      if (bytesRead > target.size || bytes.subarray(0, bytesRead).includes(0)) throw new ContextDenied("Binary or changing file cannot be captured.");
+    } finally { await file.close(); }
     const document = vscode.workspace.textDocuments.find((item) => item.uri.toString() === uri.toString() && !item.isClosed) ?? await vscode.workspace.openTextDocument(uri);
     this.checked(uri, guard);
     const text = document.getText();
@@ -118,7 +127,7 @@ export class WorkspaceContextService implements vscode.Disposable {
       truncated = diagnostics.length > 100 || content.length > 16000;
       content = content.slice(0, 16000);
     }
-    return { id: randomUUID(), kind, relativePath, documentUri: document.uri.toString(), language: document.languageId.slice(0, 100), documentVersion: document.version, dirty: document.isDirty, range: rangeDto(range), sourceHash: digest(full), excerptHash: digest(content), content, truncated };
+    return { id: randomUUID(), kind, relativePath, documentUri: document.uri.toString(), language: document.languageId.slice(0, 100), documentVersion: document.version, dirty: document.isDirty, range: rangeDto(range), sourceBytes: Buffer.byteLength(full, "utf8"), sourceHash: digest(full), excerptHash: digest(content), content, truncated };
   }
   private async candidates(guard: WorkspaceGuard, folder: vscode.WorkspaceFolder) {
     const token = new vscode.CancellationTokenSource(); const timer = setTimeout(() => token.cancel(), 5000);
@@ -149,7 +158,26 @@ export class WorkspaceContextService implements vscode.Disposable {
     this.state.busy = true; this.state.notice = null; this.publish();
     try {
       const { folder, guard } = this.scope();
-      if (action.type === "context.attach" || action.type === "context.read") {
+      if (action.type === "context.remove") {
+        this.state.items = this.state.items.filter((item) => item.id !== action.id);
+      } else if (action.type === "context.pickFiles") {
+        const selected = await vscode.window.showOpenDialog({
+          title: "Attach workspace files to chat", defaultUri: folder.uri, canSelectFiles: true,
+          canSelectFolders: false, canSelectMany: true, openLabel: "Attach to chat",
+        });
+        if (!selected || ticket !== this.generation) return;
+        if (selected.length > 6) throw new ContextDenied("Choose up to six files.");
+        const items = [...this.state.items];
+        for (const uri of selected) {
+          const document = await this.document(uri, guard);
+          const item = this.item(document, "file", guard);
+          const index = items.findIndex((existing) => existing.documentUri === item.documentUri && existing.kind === "file");
+          if (index < 0) items.push(item);
+          else items[index] = item;
+        }
+        if (items.length > 6) throw new ContextDenied("Remove an attachment first. Each message supports six excerpts.");
+        if (ticket === this.generation) this.state.items = items;
+      } else if (action.type === "context.attach" || action.type === "context.read") {
         const editor = action.type === "context.attach" ? this.editor() : undefined;
         const uri = editor?.document.uri ?? (action.type === "context.read" ? this.handles.get(action.documentId) : undefined);
         if (!uri) throw new ContextDenied("That file handle expired. Browse or search again.");
@@ -157,6 +185,21 @@ export class WorkspaceContextService implements vscode.Disposable {
         const kind = action.type === "context.attach" ? action.source : "file";
         if (kind === "selection" && editor?.selection.isEmpty) throw new ContextDenied("Select some text in the source editor first.");
         const item = this.item(document, kind, guard, kind === "selection" ? editor?.selection : undefined);
+        if (kind === "gitDiff") {
+          if (document.isDirty) throw new ContextDenied("Save the file before capturing its Git diff.");
+          const git = vscode.extensions.getExtension<{ getAPI(version: 1): {
+            getRepository(uri: vscode.Uri): { diffWithHEAD(path: string): Promise<string> } | null;
+          } }>("vscode.git");
+          const repository = (await git?.activate())?.getAPI(1).getRepository(uri);
+          if (!repository) throw new ContextDenied("No Git repository available for this file.");
+          const diff = await repository.diffWithHEAD(uri.fsPath);
+          if (containsSensitiveText(diff)) throw new ContextDenied("Possible credentials detected in the diff.");
+          if (!diff) throw new ContextDenied("No tracked changes against HEAD for this file.");
+          item.content = diff.slice(0, 16000);
+          item.truncated = item.content.length < diff.length;
+          item.excerptHash = digest(item.content);
+          item.range = rangeDto(document.validateRange(new vscode.Range(0, 0, document.lineCount, 0)));
+        }
         if (ticket !== this.generation) return;
         this.state.items = [...this.state.items.filter((old) => !(old.documentUri === item.documentUri && old.kind === item.kind)), item].slice(-6);
         this.state.notice = "Captured locally only. Nothing is sent to a model.";

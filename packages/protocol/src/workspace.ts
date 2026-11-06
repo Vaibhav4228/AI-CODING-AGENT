@@ -2,9 +2,11 @@ import { z } from "zod";
 
 const id = z.uuid();
 export const contextActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("context.pickFiles") }).strict(),
+  z.object({ type: z.literal("context.remove"), id }).strict(),
   z.object({ type: z.literal("context.refresh") }).strict(),
   z.object({ type: z.literal("context.chooseWorkspace") }).strict(),
-  z.object({ type: z.literal("context.attach"), source: z.enum(["file", "selection", "diagnostics"]) }).strict(),
+  z.object({ type: z.literal("context.attach"), source: z.enum(["file", "selection", "diagnostics", "gitDiff"]) }).strict(),
   z.object({ type: z.literal("context.list") }).strict(),
   z.object({ type: z.literal("context.search"), query: z.string().trim().min(1).max(200) }).strict(),
   z.object({ type: z.literal("context.read"), documentId: id }).strict(),
@@ -16,10 +18,10 @@ export const contextIntentSchema = z.object({
 
 const range = z.object({ startLine: z.number().int().positive(), startCharacter: z.number().int().nonnegative(), endLine: z.number().int().positive(), endCharacter: z.number().int().nonnegative() }).strict();
 export const contextItemSchema = z.object({
-  id, kind: z.enum(["file", "selection", "diagnostics"]), relativePath: z.string().max(1024),
+  id, kind: z.enum(["file", "selection", "diagnostics", "gitDiff"]), relativePath: z.string().max(1024),
   documentUri: z.string().max(4096).startsWith("file:"), language: z.string().max(100),
   documentVersion: z.number().int().nonnegative(), dirty: z.boolean(), range,
-  sourceHash: z.string().regex(/^[a-f0-9]{64}$/), excerptHash: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceBytes: z.number().int().nonnegative(), sourceHash: z.string().regex(/^[a-f0-9]{64}$/), excerptHash: z.string().regex(/^[a-f0-9]{64}$/),
   content: z.string().max(16000), truncated: z.boolean(),
 }).strict();
 export const contextStateSchema = z.object({

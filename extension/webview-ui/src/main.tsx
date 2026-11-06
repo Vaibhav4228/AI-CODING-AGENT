@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { draftSchema, Draft, hostMessageSchema, PreviewState, UiIntent } from "@local-agent/protocol";
+import { ContextPanel } from "./ContextPanel";
+import { ContextAction, ContextState, contextHostMessageSchema, draftSchema, Draft, hostMessageSchema, PreviewState, UiIntent } from "@local-agent/protocol";
 import "./styles.css";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): unknown; setState(state: unknown): void };
@@ -16,6 +17,9 @@ function Icon({ name }: { name: "code" | "arrow" | "stop" | "check" | "shield" |
 
 function App() {
   const [state, setState] = useState<PreviewState | null>(null);
+  const [context, setContext] = useState<ContextState | null>(null);
+  const viewId = useRef<string | null>(null);
+  const [section, setSection] = useState<"chat" | "context">("chat");
   const [draft, setDraft] = useState(initialDraft.draft);
   const [scenario, setScenario] = useState<Draft["scenario"]>(initialDraft.scenario);
   const [bridgeError, setBridgeError] = useState(false);
@@ -23,8 +27,13 @@ function App() {
   const composer = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const receive = (event: MessageEvent<unknown>) => {
+      const contextMessage = contextHostMessageSchema.safeParse(event.data);
+      if (contextMessage.success) {
+        if (contextMessage.data.viewId === viewId.current) setContext(contextMessage.data.state);
+        return;
+      }
       const parsed = hostMessageSchema.safeParse(event.data);
-      if (parsed.success) { setState(parsed.data.state); setBridgeError(false); }
+      if (parsed.success) { viewId.current = parsed.data.state.viewId; setState(parsed.data.state); setBridgeError(false); }
     };
     window.addEventListener("message", receive);
     vscode.postMessage({ protocolVersion: 1, requestId: crypto.randomUUID(), type: "ui.ready" });
@@ -35,6 +44,9 @@ function App() {
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest", behavior: "instant" }); }, [state?.messages.length, state?.phase]);
   // Only local draft and scenario persist in the webview; no credentials/run authority.
   const send = (intent: UiIntent) => vscode.postMessage(intent);
+  const contextAction = (action: ContextAction) => {
+    if (state) vscode.postMessage({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, action });
+  };
   const busy = state?.phase === "running" || state?.phase === "awaiting_approval";
   const start = (prompt: string, selected = scenario) => {
     if (!state || busy || !prompt.trim()) return;
@@ -48,19 +60,39 @@ function App() {
     composer.current?.focus();
   };
   return <main className="app">
-    <header className="topbar"><div className="brand"><span className="brand-icon"><Icon name="code" /></span><strong>Workspace Agent</strong><span className="preview-pill">PREVIEW</span></div><button className="icon-button" aria-label="Reset demo" title="Reset demo" disabled={!state} onClick={() => state && send({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, type: "demo.reset" })}><Icon name="reset" /></button></header>
-    <div className="workspace-bar"><span className="folder-mark" aria-hidden="true">▱</span><span className="workspace-name">{state?.workspaceLabel ?? "Connecting to preview…"}</span><span className="local-pill">LOCAL FIRST</span></div>
-    <section className="notice" aria-label="Preview mode"><span className="notice-dot" /><span>Scripted demo · no files read, changed or uploaded</span></section>
-    <section className="conversation" aria-label="Conversation">
-      {!state?.messages.length && <div className="welcome"><div className="welcome-symbol"><Icon name="code" /></div><div className="eyebrow">BUILT AROUND YOUR WORKSPACE</div><h1>A little less context switching.</h1><p>Understand the code. Review the change.<br />Keep control of what happens next.</p><div className="suggestions"><button onClick={() => start("Show me the local coding workflow", "plan")} disabled={!state}>Explore the workflow <span>↗</span></button><button onClick={() => start("Show a patch approval", "approval")} disabled={!state}>Preview a review step <span>↗</span></button><button onClick={() => start("Show provider failure recovery", "failure")} disabled={!state}>Try a failure state <span>↗</span></button></div><div className="workspace-hint"><Icon name="shield" /><span>Your opened workspace stays local.<br />A connected model would receive selected context only.</span></div></div>}
-      {state?.messages.map((message) => <article key={message.id} className={`message ${message.role}`}><div className="message-label">{message.role === "user" ? "YOU" : "WORKSPACE AGENT · DEMO"}</div><div className="message-body">{message.content}</div></article>)}
+    <header className="topbar">
+      <div className="brand"><span className="brand-icon"><Icon name="code" /></span><strong className="workspace-name">{context?.workspaceLabel ?? state?.workspaceLabel ?? "Workspace"}</strong></div>
+      <button className="icon-button" aria-label="Reset demo" title="Reset conversation" disabled={!state} onClick={() => state && send({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, type: "demo.reset" })}><Icon name="reset" /></button>
+    </header>
+    <nav className="view-switch" aria-label="Agent views">
+      <button aria-pressed={section === "chat"} onClick={() => setSection("chat")}>Chat</button>
+      <button aria-pressed={section === "context"} onClick={() => setSection("context")}>Workspace context{context?.items.length ? ` (${context.items.length})` : ""}</button>
+    </nav>
+    {section === "context" && <div className="context-view">
+      <ContextPanel state={context} send={(action) => {
+        if (state) vscode.postMessage({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, action });
+      }} />
+    </div>}
+    <section className="conversation" aria-label="Conversation" hidden={section !== "chat"}>
+      {!state?.messages.length && <div className="welcome">
+        <h1>Start a conversation</h1><p>Try a scripted coding task, or inspect files in Workspace context.</p>
+        <div className="suggestions">
+          <button onClick={() => start("Show me the local coding workflow", "plan")} disabled={!state}>Explore the workflow <span aria-hidden="true">↗</span></button>
+          <button onClick={() => start("Show a patch approval", "approval")} disabled={!state}>Preview a review step <span aria-hidden="true">↗</span></button>
+          <button onClick={() => start("Show provider failure recovery", "failure")} disabled={!state}>Try a failure state <span aria-hidden="true">↗</span></button>
+        </div>
+      </div>}
+      {state?.messages.map((message) => <article key={message.id} className={`message ${message.role}`}><div className="message-label">{message.role === "user" ? "YOU" : "WORKSPACE AGENT · DEMO"}</div><div className="message-body">{message.content}</div>{!!message.attachments?.length && <ul className="file-chips" aria-label="Message attachments">{message.attachments.map((name, index) => <li key={index}>{name}</li>)}</ul>}</article>)}
       {!!state?.activities.length && <section className="activity-panel" aria-label="Tool activity"><div className="section-label">ACTIVITY <span>SIMULATED</span></div>{state.activities.map((item) => <div className="activity" key={item.id}><span className={`activity-status ${item.status}`}>{item.status === "completed" ? <Icon name="check" /> : <span aria-hidden="true">{item.status === "failed" ? "!" : item.status === "cancelled" ? "−" : "·"}</span>}</span><div><strong>{item.title}</strong><p>{item.detail}</p><span className="activity-state">{item.status}</span></div></div>)}</section>}
       {state?.approval && <section className="approval-panel" aria-label="Demo approval"><div className="section-label"><Icon name="shield" /> REVIEW REQUIRED</div><h2>{state.approval.title}</h2><p>{state.approval.description}</p><div className="approval-actions"><button onClick={() => decide("deny")}>Deny demo action</button><button className="primary" onClick={() => decide("approve_once")}>Approve demo once</button></div></section>}
       {state?.alert && <div role="alert" className={`alert ${state.phase === "failed" ? "error" : ""}`}>{state.alert}</div>}
       {bridgeError && !state && <div role="alert" className="alert error">Preview connection unavailable. Reopen the sidebar to try again.</div>}
       <div className="status-line" role="status" aria-live="polite">{state && state.phase !== "idle" ? statusLabels[state.phase] : ""}</div><div ref={end} />
     </section>
-    <footer className="composer-area"><div className="composer"><label className="sr-only" htmlFor="task-input">Ask the demo agent</label><textarea ref={composer} id="task-input" placeholder="What would you like to work on?" value={draft} maxLength={4000} rows={3} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); start(draft); } }} /><div className="composer-toolbar"><span className="context-chip" title="Workspace context tools arrive in Step 3">+ Context <span>soon</span></span><div className="composer-tools"><label className="sr-only" htmlFor="scenario">Demo scenario</label><select id="scenario" aria-label="Demo scenario" value={scenario} disabled={busy} onChange={(event) => setScenario(event.target.value as Draft["scenario"])}><option value="plan">Plan demo</option><option value="approval">Approval demo</option><option value="failure">Failure demo</option></select>{busy ? <button className="send-button stop" aria-label="Stop demo" onClick={() => state?.runId && send({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, type: "demo.cancel", runId: state.runId })}><Icon name="stop" /></button> : <button className="send-button" aria-label="Send demo message" disabled={!state || !draft.trim()} onClick={() => start(draft)}><Icon name="arrow" /></button>}</div></div></div><div className="provider-bar"><span><span className="provider-dot" />DeepSeek R1 <span className="muted">· not connected</span></span><span className="shortcut">Ctrl ↵</span></div><div className="footnote">{state?.trusted ? "Trusted workspace" : "Restricted workspace"}<span>·</span>Mock mode only<span>·</span>No API calls</div></footer>
+    <footer className="composer-area" hidden={section !== "chat"}><div className="composer">
+      {!!context?.items.length && <ul className="file-chips" aria-label="Draft attachments">{context.items.map((item) => <li key={item.id}><span title={item.relativePath}>{item.relativePath}</span><button aria-label={`Remove ${item.relativePath}`} disabled={context.busy} onClick={() => contextAction({ type: "context.remove", id: item.id })}>×</button></li>)}</ul>}
+      {context?.notice && <small className="attach-notice" role="status">{context.notice}</small>}
+      <label className="sr-only" htmlFor="task-input">Ask the demo agent</label><textarea ref={composer} id="task-input" placeholder="What would you like to work on?" value={draft} maxLength={4000} rows={3} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); start(draft); } }} /><div className="composer-toolbar"><button className="attach-trigger" aria-label="Attach workspace files" title="Attach workspace files" disabled={!context?.trusted || context.busy || busy} onClick={() => contextAction({ type: "context.pickFiles" })}>+</button><div className="composer-tools"><label className="sr-only" htmlFor="scenario">Demo scenario</label><select id="scenario" aria-label="Demo scenario" value={scenario} disabled={busy} onChange={(event) => setScenario(event.target.value as Draft["scenario"])}><option value="plan">Plan demo</option><option value="approval">Approval demo</option><option value="failure">Failure demo</option></select>{busy ? <button className="send-button stop" aria-label="Stop demo" onClick={() => state?.runId && send({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, type: "demo.cancel", runId: state.runId })}><Icon name="stop" /></button> : <button className="send-button" aria-label="Send demo message" disabled={!state || !draft.trim()} onClick={() => start(draft)}><Icon name="arrow" /></button>}</div></div></div><div className="provider-bar"><span><span className="provider-dot" />DeepSeek R1 <span className="muted">· not connected</span></span><span className="shortcut">Ctrl ↵</span></div></footer>
   </main>;
 }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const id = z.uuid();
-const message = z.object({ id, role: z.enum(["user", "assistant"]), content: z.string().max(8000) }).strict();
+const message = z.object({ id, role: z.enum(["user", "assistant"]), content: z.string().max(8000), attachments: z.array(z.string().max(1024)).max(6).optional() }).strict();
 const activity = z.object({ id, title: z.string().max(160), detail: z.string().max(1000), status: z.enum(["running", "completed", "failed", "cancelled"]) }).strict();
 export const previewStateSchema = z.object({
   viewId: id, runId: id.nullable(),
