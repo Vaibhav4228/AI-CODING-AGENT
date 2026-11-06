@@ -71,6 +71,7 @@
   },
   "dependencies": {
     "@local-agent/protocol": "file:../packages/protocol",
+    "ignore": "7.0.14",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

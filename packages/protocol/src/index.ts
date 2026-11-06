@@ -83,3 +83,5 @@ export type CheckpointState = z.infer<typeof checkpointStateSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 export * from './webview';
+
+export * from './workspace';
