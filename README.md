@@ -45,7 +45,7 @@ npm --prefix extension run package
 
 See [extension setup](extension/README.md) and the local [Step 2 report](docs/STEP_2_REPORT.md). The UI/browser tests use disposable profiles; your normal VS Code/browser profile is not modified.
 
-The selected provider direction is **DeepSeek R1**, not OpenAI. The root `.env.example` contains placeholders; put credentials only in the ignored local `.env`. Never paste keys into the demo composer. The preview does not load that file. Exact endpoint/model ID and tool support will be verified in Step 6; no silent model substitution is planned.
+The DeepSeek tab supports opt-in live questions and proposed diffs using deepseek-flash. Attach a source file or selection, enter a question, and review the outbound context before sending. Development hosts can use DEEPSEEK_API_KEY in the ignored repository-root .env. Installed extensions prompt for a key through VS Code SecretStorage. The separate demo remains offline.
 
 ## Existing server: legacy development only
 
