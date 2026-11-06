@@ -2,23 +2,27 @@ import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import { DemoController } from "./demo";
 import { renderHtml } from "./html";
+import { registerFixtureCommand } from "./fixture-command";
+import { SidebarApprovals } from "./approvals";
 import { WorkspaceContextService } from "./workspace/service";
 import { contextIntentSchema, uiIntentSchema } from "@local-agent/protocol";
 
 export function activate(context: vscode.ExtensionContext) {
   let currentView: vscode.WebviewView | undefined;
   let bridgeReady = false;
+  const approvals = new SidebarApprovals(context.globalStorageUri.fsPath, () => workspace.approvalScope());
   const controller = new DemoController(
     (message) => { void currentView?.webview.postMessage(message); },
     vscode.workspace.workspaceFolders?.[0]?.name ?? "No folder selected",
-    vscode.workspace.isTrusted,
+    vscode.workspace.isTrusted, undefined, approvals,
   );
   const workspace = new WorkspaceContextService((state) => {
     if (currentView && bridgeReady) void currentView.webview.postMessage({
       protocolVersion: 1, type: "workspace.context", viewId: controller.snapshot().viewId, state,
     });
   });
-  context.subscriptions.push(workspace);
+  context.subscriptions.push(workspace, approvals);
+  registerFixtureCommand(context, () => workspace.approvalScope());
   context.subscriptions.push({ dispose: () => controller.dispose() });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("localAgent.sidebar", {
     resolveWebviewView(view) {

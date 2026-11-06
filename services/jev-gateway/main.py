@@ -12,6 +12,9 @@ Does NOT execute project tools or touch the sandbox.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from typing import Any, Literal, Optional
 
 from fastapi import FastAPI
@@ -22,6 +25,8 @@ app = FastAPI(
     version="0.1.0",
     description="Classification-only sidecar. Express owns tools and sandbox.",
 )
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 PORT = int(os.getenv("JEV_GATEWAY_PORT", "8001"))
 TYPESAFE_API_KEY = os.getenv("TYPESAFE_API_KEY", "").strip()

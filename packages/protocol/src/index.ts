@@ -5,8 +5,17 @@ export const MAX_MESSAGE_BYTES = 128 * 1024;
 export const idSchema = z.uuid();
 export const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
+export const fixtureScenario = z.enum(["explain", "fix", "injection"]);
+export const fixtureStop = z.enum(["verified", "invalid_tool", "unverified", "budget", "cancelled", "denied", "provider_error"]);
+const fixtureRun = z.object({
+  session: idSchema, scenario: fixtureScenario, started: z.number(), tokens: z.number().int().nonnegative(),
+  calls: z.number().int().nonnegative(), repairs: z.number().int().nonnegative(), candidate: z.number().nullable(),
+  evidence: z.string().nullable(), stop: fixtureStop.nullable(), events: z.array(z.string().max(300)).max(64),
+}).strict();
+export type FixtureRun = z.infer<typeof fixtureRun>;
 // Small, versioned state spike; not a LangGraph checkpoint implementation.
 export const checkpointStateSchema = z.object({
+  fixture: fixtureRun.optional(),
   schemaVersion: z.literal(1),
   status: z.enum(["created", "planning", "awaiting_approval", "completed", "cancelled", "failed"]),
   summary: z.string().max(8000),

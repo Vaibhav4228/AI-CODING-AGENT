@@ -1,11 +1,11 @@
 import express from 'express'
-import 'dotenv/config'
-import { bootStrapApp } from './app/bootstrap/index'
+import './config/environment'
+import { startServer } from './app/startServer'
 
 const app = express()
-const PORT = parseInt(process.env.PORT as string)
+const PORT = Number(process.env.PORT ?? 5000)
 
-bootStrapApp(app, PORT).catch((error) => {
+startServer(app, PORT).catch((error) => {
     console.error('Failed to start app:', error)
     process.exit(1)
 })

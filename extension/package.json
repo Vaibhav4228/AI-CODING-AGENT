@@ -29,6 +29,7 @@
   },
   "contributes": {
     "commands": [
+      { "command": "localAgent.fixture", "title": "Workspace Agent: Run Offline Agent Fixture" },
       {
         "command": "localAgent.open",
         "title": "Workspace Agent: Open Preview"

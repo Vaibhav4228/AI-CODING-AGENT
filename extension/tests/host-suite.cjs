@@ -23,6 +23,28 @@ exports.run = async () => {
   const path = require("node:path");
   const folder = vscode.workspace.workspaceFolders[0];
   const root = folder.uri.fsPath;
+  const { SidebarApprovals } = require("../src/approvals");
+  const { DemoController } = require("../src/demo");
+  const fs = require("node:fs");
+  const { randomUUID } = require("node:crypto");
+  const directory = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "agent-review-"));
+  let revision = "a".repeat(64);
+  const reviews = new SidebarApprovals(directory, () => ({ root, revision }));
+  try {
+    let tick;
+    const controller = new DemoController(() => {}, "fixture", true, { later(fn) { tick = fn; return () => {}; } }, reviews);
+    const send = payload => controller.receive({ protocolVersion: 1, requestId: randomUUID(), viewId: controller.snapshot().viewId, ...payload });
+    for (const expected of ["completed", "cancelled", "failed"]) {
+      send({ type: "demo.start", scenario: "approval", prompt: "Review" });
+      tick();
+      const state = controller.snapshot();
+      assert.ok(state.approval, state.alert);
+      if (expected === "failed") revision = "b".repeat(64);
+      send({ type: "demo.decide", decision: expected === "cancelled" ? "deny" : "approve_once", approvalId: state.approval.id, runId: state.runId });
+      assert.equal(controller.snapshot().phase, expected, controller.snapshot().alert);
+    }
+    controller.dispose();
+  } finally { reviews.dispose(); fs.rmSync(directory, { recursive: true }); }
   const guard = new WorkspaceGuard(root);
   const link = path.join(root, "linked");
 

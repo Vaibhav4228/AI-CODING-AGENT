@@ -204,3 +204,68 @@ test("exact approvals survive restart, resist tampering and can be consumed only
     assert.equal(resumed.handle(consume({ approvalId: second.approvalId })).error.code, "APPROVAL_DENIED");
   } finally { resumed.close(); }
 });
+
+const { FixtureLoop } = require("../dist/local-runtime/fixture-loop.js");
+function fixtureAgent(t, provider) {
+  let store;
+  t.after(() => store?.close());
+  const options = fixture(t);
+  store = new LocalCheckpointStore(options.storageDirectory);
+  const scope = { owner: options.ownerId, workspace: options.workspaceId, session: options.sessionId };
+  return { agent: new FixtureLoop(store, scope, provider), store, scope, options };
+}
+function advance(agent, id) {
+  for (let i = 0; i < 20; i++) {
+    const cp = agent.step(id);
+    if (cp.state.fixture.stop || cp.state.status === "awaiting_approval") return cp;
+  }
+  assert.fail("unbounded loop");
+}
+test("explain and injection fixtures are isolated and report verified evidence or denial", t => {
+  const { agent } = fixtureAgent(t);
+  const explain = agent.start("explain"), injected = agent.start("injection");
+  assert.equal(advance(agent, injected.runId).state.fixture.stop, "invalid_tool");
+  const cp = advance(agent, explain.runId);
+  assert.equal(cp.state.fixture.stop, "verified");
+  assert.equal(cp.state.fixture.candidate, null);
+  assert.equal(agent.step(cp.runId).revision, cp.revision);
+});
+test("pending fixture reloads, cursor replays only new events, approved fix passes independent checks", t => {
+  const { agent, scope, options } = fixtureAgent(t);
+  const id = agent.start("fix").runId;
+  const pending = advance(agent, id);
+  const reopened = new LocalCheckpointStore(options.storageDirectory);
+  try {
+    assert.throws(() => new FixtureLoop(reopened, { ...scope, session: randomUUID() }).load(id));
+    const resumed = new FixtureLoop(reopened, scope);
+    assert.deepEqual(resumed.step(id), pending);
+    const final = resumed.step(id, "approved");
+    assert.equal(final.state.fixture.stop, "verified");
+    assert.equal(final.state.fixture.events.slice(pending.revision).length, 1);
+    assert.equal(resumed.step(id, "approved").revision, final.revision);
+  } finally { reopened.close(); }
+});
+test("denials, cancellation, provider failures, ungrounded claims and budgets stop runs", t => {
+  for (const [provider, reason] of [
+    [() => { throw Error(); }, "provider_error"],
+    [() => ({ action: { name: "answer", line: 1, finding: "discount applied twice" }, costMicros: 0 }), "unverified"],
+    [() => ({ action: { name: "read", path: "pricing.ts" }, costMicros: 0 }), "budget"],
+    [() => ({ action: "x".repeat(10000), costMicros: 0 }), "budget"],
+    [() => ({ action: null, costMicros: 1 }), "budget"],
+  ]) {
+    const { agent } = fixtureAgent(t, provider);
+    assert.equal(advance(agent, agent.start("fix").runId).state.fixture.stop, reason);
+  }
+  const { agent } = fixtureAgent(t);
+  const id = agent.start("fix").runId;
+  advance(agent, id);
+  assert.equal(agent.step(id, "deny").state.fixture.stop, "denied");
+  assert.equal(agent.step(agent.start("explain").runId, "cancel").state.fixture.stop, "cancelled");
+});
+test("bad fixes exhaust repairs instead of claiming success", t => {
+  const { agent } = fixtureAgent(t, run => ({ action: run.evidence
+    ? { name: "propose", discountApplications: 2 } : { name: "read", path: "pricing.ts" }, costMicros: 0 }));
+  const id = agent.start("fix").runId;
+  for (let attempt = 0; attempt < 3; attempt++) { advance(agent, id); agent.step(id, "approved"); }
+  assert.equal(agent.load(id).state.fixture.stop, "unverified");
+});

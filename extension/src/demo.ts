@@ -9,7 +9,8 @@ export class DemoController {
   private readonly timers: Array<() => void> = [];
   private readonly seen = new Set<string>();
   private disposed = false;
-  constructor(private readonly emit: (message: unknown) => void, workspaceLabel = "No folder selected", trusted = false, private readonly clock = scheduler) {
+  constructor(private readonly emit: (message: unknown) => void, workspaceLabel = "No folder selected", trusted = false, private readonly clock = scheduler,
+    private readonly reviews?: { request(run: string): string; decide(id: string, decision: "deny" | "approve_once"): void }) {
     this.state = { viewId: randomUUID(), runId: null, phase: "idle", workspaceLabel: workspaceLabel.slice(0, 120), trusted, providerLabel: "DeepSeek R1", providerConnected: false, messages: [], activities: [], approval: null, alert: null };
   }
   snapshot(): PreviewState { return structuredClone(this.state); }
@@ -43,11 +44,14 @@ export class DemoController {
     }
     if (intent.type === "demo.decide") {
       if (this.state.phase !== "awaiting_approval" || intent.runId !== this.state.runId || intent.approvalId !== this.state.approval?.id) return this.fail("Approval rejected: the demo action is stale.");
+      try { this.reviews?.decide(intent.approvalId, intent.decision); }
+      catch { this.state.phase = "failed"; this.state.approval = null; return this.fail("Review expired or workspace changed. Start a new review."); }
       if (intent.decision === "deny") {
         this.state.phase = "cancelled"; this.state.approval = null;
         this.state.activities = this.state.activities.map((item) => ({ ...item, status: "cancelled" }));
         this.state.alert = "Demo action denied. Nothing was executed."; return this.publish();
       }
+      if (this.reviews) return this.finish("One-time approval recorded and consumed for npm test. No command was executed.");
       return this.finish("Demo approval accepted. In the real workflow, the exact patch would be revalidated before applying. This preview did not modify any file.");
     }
     if (["running", "awaiting_approval"].includes(this.state.phase)) return this.fail("Stop the current demo before starting another.");
@@ -65,6 +69,13 @@ export class DemoController {
       }
       if (intent.scenario === "approval") {
         this.state.phase = "awaiting_approval";
+        if (this.reviews) {
+          try {
+            this.state.approval = { id: this.reviews.request(runId!), runId: runId!, title: "Review npm test",
+              description: "Command: npm test. Directory: workspace root (.). This preview records your decision without executing the command." };
+          } catch { this.state.phase = "failed"; return this.fail("Approval unavailable. Select a trusted local folder and check private storage availability."); }
+          return this.publish();
+        }
         this.state.approval = { id: randomUUID(), runId: runId!, title: "Review a proposed patch", description: "Demo only: propose a change to fixture.ts. Approving updates this preview; it grants no filesystem or terminal access." };
         return this.publish();
       }

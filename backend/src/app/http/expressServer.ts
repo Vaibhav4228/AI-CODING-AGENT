@@ -5,9 +5,9 @@ import passport from "passport"
 import session from "express-session"
 import { Strategy as GitHubStrategy } from "passport-github2"
 import MongoStore from 'connect-mongo'
-import { handleExpressError } from '../exceptions/handleExpressError'
-import { UserService } from '../../services/UserService'
-import { uploadProject } from '../../http/controllers/uploadFileController'
+import { handleExpressError } from './handleExpressError'
+import { UserService } from '../services/UserService'
+import { uploadProject } from './controllers/uploadFileController'
 
 export function expressServer(app: Express, PORT: number) {
     const router = Router()

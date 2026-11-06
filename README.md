@@ -49,7 +49,7 @@ The selected provider direction is **DeepSeek R1**, not OpenAI. The root `.env.e
 
 ## Existing server: legacy development only
 
-The current server still requires MongoDB, session/OAuth configuration and appropriate environment values. For later explicit server testing, copy `backend/env.example` to the ignored `backend/.env`, set local values and run `npm run dev` inside backend. Do not commit secrets. Do not expose the current upload/host-shell implementation publicly; its security gaps are documented in the architecture plan. Baseline checks deliberately do not launch it.
+The current server still requires MongoDB, session/OAuth configuration and appropriate environment values. For later explicit server testing, use the single ignored repository-root `.env` (copy `.env.example` if needed), set local values and run `npm run dev` inside backend. Do not commit secrets. Do not expose the current upload/host-shell implementation publicly; its security gaps are documented in the architecture plan. Baseline checks deliberately do not launch it.
 
 The optional Python gateway is heuristic-only, not a live JEV integration. Its dependencies are not installed or pinned by this baseline. It currently binds all interfaces and uses development reload when launched; do not expose it. Docker was not found on PATH during baseline inspection; isolated command execution is a future prerequisite, with read/propose mode planned when unavailable.
 
@@ -65,3 +65,7 @@ The optional Python gateway is heuristic-only, not a live JEV integration. Its d
 - [License and provenance status](docs/PROVENANCE.md)
 
 No extension has been published. Do not reuse reference source/assets until their license permission is established.
+
+## Offline agent loop
+
+Run **Workspace Agent: Run Offline Agent Fixture** from a trusted local workspace. Select explain, fix, or malicious instruction. Events appear in the Offline run output channel. Dismiss a review and choose Resume last run to continue. Fix verification uses in-memory fixture assertions; no provider key or shell is required.

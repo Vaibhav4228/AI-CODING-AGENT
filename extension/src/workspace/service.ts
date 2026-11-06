@@ -61,6 +61,10 @@ export class WorkspaceContextService implements vscode.Disposable {
     if (!editor || editor.document.isClosed) throw new ContextDenied("Focus an opened workspace file before adding context.");
     return editor;
   }
+  approvalScope() {
+    const { folder } = this.scope();
+    return { root: folder.uri.fsPath, revision: digest(String(this.generation)) };
+  }
   snapshot(): ContextState { return structuredClone(this.state); }
   private publish(): void { if (!this.disposed) this.emit(contextStateSchema.parse(this.state)); }
   refreshMetadata(): void {
