@@ -1,3 +1,4 @@
+import {registerSandbox} from "./sandbox-command";
 import { liveChat } from "./live";
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
@@ -18,11 +19,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.isTrusted, undefined, approvals,
   );
   const workspace = new WorkspaceContextService((state) => {
+    live?.refresh();
     if (currentView && bridgeReady) void currentView.webview.postMessage({
       protocolVersion: 1, type: "workspace.context", viewId: controller.snapshot().viewId, state,
     });
   });
-  context.subscriptions.push(workspace, approvals);
+  const live = liveChat(context, workspace, () => currentView, () => controller.snapshot().viewId);
+  context.subscriptions.push(workspace, approvals, live);
+  registerSandbox(context,workspace);
   registerFixtureCommand(context, () => workspace.approvalScope());
   context.subscriptions.push({ dispose: () => controller.dispose() });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("localAgent.sidebar", {
@@ -36,10 +40,9 @@ export function activate(context: vscode.ExtensionContext) {
         scriptUri: view.webview.asWebviewUri(vscode.Uri.joinPath(media, "index.js")).toString(),
         styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(media, "index.css")).toString(),
       });
-      const live = liveChat(context, workspace, view, () => controller.snapshot().viewId);
       const listener = view.webview.onDidReceiveMessage((message: unknown) => {
         if (view !== currentView) return;
-        if (bridgeReady && live.receive(message)) return;
+        if (bridgeReady && live?.receive(message)) return;
         const intent = contextIntentSchema.safeParse(message);
         if (intent.success) {
           if (bridgeReady && intent.data.viewId === controller.snapshot().viewId) void workspace.execute(intent.data.action);
@@ -55,7 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
         } else controller.receive(message);
         if (parsed.success && parsed.data.type === "ui.ready") workspace.refreshMetadata();
       });
-      view.onDidDispose(() => { live.dispose(); listener.dispose(); if (currentView === view) currentView = undefined; });
+      view.onDidDispose(() => { listener.dispose(); if (currentView === view) currentView = undefined; });
     },
   }));
   context.subscriptions.push(vscode.commands.registerCommand("localAgent.open", () => vscode.commands.executeCommand("workbench.view.extension.localAgent")));

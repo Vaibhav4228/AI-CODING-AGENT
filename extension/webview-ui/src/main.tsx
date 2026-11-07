@@ -31,15 +31,9 @@ function App() {
     if (state) vscode.postMessage({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, action });
   };
   return <main className="app">
-    <header className="topbar">
-      <strong>{context?.workspaceLabel ?? state?.workspaceLabel ?? "Workspace"}</strong>
-    </header>
-    <nav className="view-switch" aria-label="Agent views">
-      <button aria-pressed={section === "chat"} onClick={() => setSection("chat")}>Chat</button>
-      <button aria-pressed={section === "context"} onClick={() => setSection("context")}>Workspace context{context?.items.length ? ` (${context.items.length})` : ""}</button>
-    </nav>
-    <div hidden={section !== "chat"} style={{overflow:"auto"}}><LiveChat viewId={state?.viewId} context={context} send={m=>vscode.postMessage(m)} attach={()=>contextAction({type:"context.pickFiles"})}/></div>
+    <div className="va-page" hidden={section !== "chat"}><LiveChat viewId={state?.viewId} context={context} label={context?.workspaceLabel ?? state?.workspaceLabel ?? "Workspace"} send={m=>vscode.postMessage(m)} action={contextAction} review={()=>setSection("context")}/></div>
     {section === "context" && <div className="context-view">
+      <button onClick={()=>setSection("chat")}>← Back to chat</button>
       <ContextPanel state={context} send={(action) => {
         if (state) vscode.postMessage({ protocolVersion: 1, requestId: crypto.randomUUID(), viewId: state.viewId, action });
       }} />

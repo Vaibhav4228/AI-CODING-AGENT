@@ -28,7 +28,7 @@ export class WorkspaceGuard {
     this.canonicalRoot = fs.realpathSync(this.root);
     if (!fs.statSync(this.canonicalRoot).isDirectory()) throw new ContextDenied();
   }
-  check(filename: string): { relativePath: string; filename: string; size: number } {
+  check(filename: string, allowMissing = false): { relativePath: string; filename: string; size: number } {
     const relative = path.relative(this.root, path.resolve(filename));
     if (!relative || path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`) || relative.includes("\0")) throw new ContextDenied();
     const parts = relative.split(path.sep);
@@ -36,7 +36,9 @@ export class WorkspaceGuard {
     let current = this.canonicalRoot;
     for (const [index, part] of parts.entries()) {
       current = path.join(current, part);
-      const stat = fs.lstatSync(current);
+      const stat = fs.lstatSync(current, {throwIfNoEntry:false});
+      if (!stat && allowMissing) break;
+      if (!stat) throw new ContextDenied();
       if (stat.isSymbolicLink() || (index < parts.length - 1 && !stat.isDirectory())) throw new ContextDenied();
       if (index === parts.length - 1 && (!stat.isFile() || stat.nlink > 1 || stat.size > MAX_FILE_BYTES)) throw new ContextDenied("File is excluded, unsupported, or larger than 256 KiB.");
     }
@@ -61,6 +63,6 @@ export class WorkspaceGuard {
         }
       }
     }
-    return { relativePath: normalized, filename: current, size: fs.statSync(current).size };
+    return { relativePath: normalized, filename: path.resolve(filename), size: fs.statSync(filename,{throwIfNoEntry:false})?.size ?? 0 };
   }
 }

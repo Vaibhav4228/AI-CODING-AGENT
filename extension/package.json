@@ -29,6 +29,7 @@
   },
   "contributes": {
     "commands": [
+      { "command": "localAgent.sandbox", "title": "Vaibhav AI: Run Sandbox Command" },
       { "command": "localAgent.fixture", "title": "Workspace Agent: Run Offline Agent Fixture" },
       {
         "command": "localAgent.open",
@@ -66,6 +67,7 @@
     "test": "npm run build && node --test tests/*.test.cjs",
     "check": "npm run typecheck && npm run lint && npm test",
     "test:ui": "npm run build && node tests/ui.cjs",
+    "test:persistence": "npm run build && node tests/persistence-ui.cjs",
     "test:host": "npm run build && node tests/host.cjs",
     "vscode:prepublish": "npm run typecheck && npm run build",
     "package": "vsce package --no-dependencies --allow-missing-repository --skip-license --out artifacts/workspace-agent-preview-0.0.1.vsix"

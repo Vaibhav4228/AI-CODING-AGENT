@@ -106,3 +106,42 @@ export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export * from './webview';
 
 export * from './workspace';
+
+
+// Live chat bridge: the host owns transcripts, credentials and run identities.
+export const liveProviderSchema = z.enum(["DeepSeek", "OpenRouter"]);
+export const liveModeSchema = z.enum(["Ask", "Plan", "Implement"]);
+export const liveTurnSchema = z.object({
+  id: idSchema, runId:idSchema.optional(), role: z.enum(["user", "assistant"]), text: z.string().max(64000),
+  mode: liveModeSchema.optional(), provider: liveProviderSchema.optional(),
+  usage: z.object({input:z.number().int().nonnegative(),output:z.number().int().nonnegative()}).optional(),
+  sources: z.array(z.object({path:z.string().max(1024),line:z.number().int().positive(),excerpt:z.string().max(16000)})).max(100).optional(),
+  undoId: z.string().max(128).optional(), rejected:z.boolean().optional(),
+}).strict();
+export const liveSessionSchema = z.object({
+  id:idSchema,title:z.string().max(120),revision:z.number().int().nonnegative(),updated:z.number(),
+  turns:z.array(liveTurnSchema).max(100),historyOmitted:z.boolean().optional(),
+  pending:z.object({requestId:idSchema,runId:idSchema}).nullable(),
+  status:z.enum(["idle","running","completed","cancelled","failed","interrupted"]),
+}).strict();
+const liveBase = {viewId:idSchema};
+export const liveIntentSchema = z.discriminatedUnion("type",[
+  z.object({...liveBase,type:z.literal("live.init")}).strict(),
+  z.object({...liveBase,type:z.literal("live.ask"),sessionId:idSchema,revision:z.number().int().nonnegative(),requestId:idSchema,prompt:z.string().trim().min(1).max(4000),provider:liveProviderSchema,mode:liveModeSchema}).strict(),
+  z.object({...liveBase,type:z.literal("live.session"),action:z.enum(["new","open","rename","delete"]),sessionId:idSchema.optional()}).strict(),
+  z.object({...liveBase,type:z.literal("live.key"),provider:liveProviderSchema,action:z.enum(["set","remove","environment","model"])}).strict(),
+  z.object({...liveBase,type:z.literal("live.cancel"),sessionId:idSchema,runId:idSchema}).strict(),
+  z.object({...liveBase,type:z.literal("live.source"),path:z.string().max(1024),line:z.number().int().positive()}).strict(),
+  z.object({...liveBase,type:z.literal("live.undo"),id:z.string().max(128)}).strict(),
+  z.object({...liveBase,type:z.literal("live.sandbox")}).strict(),
+]);
+export const liveStateSchema = z.object({
+  type:z.literal("live.state"),viewId:idSchema,scopeId:z.string(),session:liveSessionSchema,
+  history:z.array(z.object({id:idSchema,title:z.string(),updated:z.number()})).max(20),
+  providers:z.array(z.object({provider:liveProviderSchema,model:z.string(),source:z.enum(["saved","environment","missing","disabled"])})).max(2),
+  notice:z.string(),
+}).strict();
+export type LiveTurn = z.infer<typeof liveTurnSchema>;
+export type LiveSession = z.infer<typeof liveSessionSchema>;
+export type LiveState = z.infer<typeof liveStateSchema>;
+export type LiveProvider = z.infer<typeof liveProviderSchema>;

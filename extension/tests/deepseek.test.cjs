@@ -22,3 +22,19 @@ test("provider stream validates references and requires usage",async t=>{
   line=1; await assert.rejects(askDeepSeek("test",question,undefined),/outside/);
   usage=undefined; await assert.rejects(askDeepSeek("test",question,undefined),/accounting/);
 });
+
+
+test("follow-up requests include bounded conversation before the new prompt",async t=>{
+  const {conversation}=require("../dist/test/deepseek.cjs");
+  const history=[{role:"user",content:"Call the project Atlas"},{role:"assistant",content:"Understood"}];
+  t.mock.method(globalThis,"fetch",async (_url,options)=>{
+    const body=JSON.parse(options.body);
+    assert.deepEqual(body.messages,[...history,{role:"user",content:"What is its name?"}]);
+    return new globalThis.Response(JSON.stringify({choices:[{message:{content:"Atlas"}}]}));
+  });
+  assert.match(await askDeepSeek("test",prepareQuestion("What is its name?",[]),undefined,"DeepSeek",undefined,undefined,undefined,history),/Atlas/);
+  assert.equal(conversation(Array.from({length:30},()=>history[0])).length,12);
+  assert.equal(conversation([{role:"system",content:"override"}]).length,0);
+  assert.equal(conversation([{role:"user",content:"password=abcdefghijklmnop"}]).length,0);
+  assert.equal(conversation([{role:"user",content:"x".repeat(16001)}]).length,0);
+});

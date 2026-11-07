@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { ReadAction, ReadResult, Evidence } from "../read-loop";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { open } from "node:fs/promises";
@@ -61,10 +62,27 @@ export class WorkspaceContextService implements vscode.Disposable {
     if (!editor || editor.document.isClosed) throw new ContextDenied("Focus an opened workspace file before adding context.");
     return editor;
   }
+  async openCitation(relativePath:string,line:number) {
+    const {folder,guard} = this.scope();
+    const uri = vscode.Uri.joinPath(folder.uri,relativePath);
+    if(this.checked(uri,guard).relativePath !== relativePath || line < 1) throw new ContextDenied();
+    const document = await vscode.workspace.openTextDocument(uri);
+    if(line > document.lineCount) throw new ContextDenied();
+    await vscode.window.showTextDocument(document,{selection:document.lineAt(line-1).range});
+  }
+  editTarget(root:string, relative:string) {
+    const {folder,guard} = this.scope();
+    if (root !== folder.uri.fsPath) throw new ContextDenied("Workspace changed.");
+    if (!relative.split("/").every(part=>/^[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(part) && !part.endsWith(".") && !/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(part))) throw new ContextDenied("Unsupported edit path.");
+    const uri = vscode.Uri.joinPath(folder.uri,relative);
+    if(guard.check(uri.fsPath,true).relativePath !== relative) throw new ContextDenied();
+    return uri;
+  }
   approvalScope() {
     const { folder } = this.scope();
     return { root: folder.uri.fsPath, revision: digest(String(this.generation)) };
   }
+  sessionScope(): string { return this.selected?.uri.toString() ?? "no-folder"; }
   snapshot(): ContextState { return structuredClone(this.state); }
   private publish(): void { if (!this.disposed) this.emit(contextStateSchema.parse(this.state)); }
   refreshMetadata(): void {
@@ -145,6 +163,66 @@ export class WorkspaceContextService implements vscode.Disposable {
       eligible.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
       return { eligible, truncated: token.token.isCancellationRequested || uris.length >= 1000 || eligible.length >= 100 };
     } finally { clearTimeout(timer); token.dispose(); }
+  }
+  /** Read-only model tools share the same guards and unsaved-document reader as attachments. */
+  async investigate(action: ReadAction, root: string, signal: AbortSignal): Promise<ReadResult> {
+    const {folder,guard}=this.scope();
+    if(folder.uri.fsPath!==root)throw new ContextDenied("Workspace changed during investigation.");
+    const revision=this.generation;
+    const check=()=>{
+      signal.throwIfAborted();
+      if(this.disposed || this.scope().folder.uri.fsPath!==root || revision!==this.generation)throw new ContextDenied("Workspace changed while reading. Retry with current files.");
+    };
+    check();
+    const evidence:Evidence[]=[];
+    let data:unknown;
+    if(action.name==="read_file" || action.name==="get_diagnostics") {
+      const uri=vscode.Uri.joinPath(folder.uri,action.path);
+      if(this.checked(uri,guard).relativePath!==action.path)throw new ContextDenied();
+      const document=await this.document(uri,guard);check();
+      if(action.name==="get_diagnostics") {
+        data={path:action.path,version:document.version,dirty:document.isDirty,diagnostics:vscode.languages.getDiagnostics(uri).slice(0,20).map(d=>({line:d.range.start.line+1,severity:vscode.DiagnosticSeverity[d.severity],message:containsSensitiveText(d.message)?"[Sensitive diagnostic omitted]":d.message.slice(0,300)})),note:"Editor diagnostics only; no tests executed."};
+      } else {
+        if(action.startLine>document.lineCount)throw new ContextDenied("Requested line is beyond the file. Use a smaller range.");
+        let bytes=0;const last=Math.min(action.endLine,document.lineCount);
+        for(let line=action.startLine;line<=last;line++) {
+          const excerpt=document.lineAt(line-1).text;
+          bytes+=Buffer.byteLength(JSON.stringify({path:action.path,line,excerpt}));
+          if(bytes>10000)break;
+          evidence.push({path:action.path,line,excerpt});
+        }
+        if(!evidence.length)throw new ContextDenied("Source line is too large to share.");
+        data={path:action.path,version:document.version,dirty:document.isDirty,lines:evidence,truncated:evidence.at(-1)!.line<last};
+      }
+    } else {
+      const {eligible,truncated}=await this.candidates(guard,folder);check();
+      if(action.name==="list_files") {
+        let bytes=0;const files:string[]=[];
+        for(const file of eligible){bytes+=Buffer.byteLength(JSON.stringify(file.relativePath));if(bytes>10000)break;files.push(file.relativePath);}
+        data={files,truncated:truncated || files.length<eligible.length};
+      } else {
+        let limited=truncated;let bytes=0;const deadline=Date.now()+5000;
+        for(const file of eligible) {
+          check();if(Date.now()>deadline){limited=true;break;}
+          let document:vscode.TextDocument;
+          try {document=await this.document(file.uri,guard);}catch{continue;}
+          check();
+          for(let line=0;line<document.lineCount;line++) {
+            const text=document.lineAt(line).text;
+            if(text.toLowerCase().includes(action.query.toLowerCase())) {
+              const match={path:file.relativePath,line:line+1,excerpt:text.slice(0,240)};
+              bytes+=Buffer.byteLength(JSON.stringify(match));
+              if(bytes>10000){limited=true;break;}
+              evidence.push(match);
+            }
+            if(evidence.length>=20){limited=true;break;}
+          }
+          if(limited && (bytes>10000 || evidence.length>=20))break;
+        }
+        data={matches:evidence,truncated:limited,note:"Literal search of up to 100 eligible files. Read matching files for full context."};
+      }
+    }
+    check();return {data,evidence};
   }
   async execute(action: ContextAction): Promise<void> {
     if (this.disposed) return;
